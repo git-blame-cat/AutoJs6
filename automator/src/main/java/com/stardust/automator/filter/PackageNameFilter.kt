@@ -19,23 +19,23 @@ object PackageNameFilter {
         }
     }
 
-    fun equals(text: String): ListFilter {
+    fun equals(text: String): Filter {
         return StringEqualsFilter(text, PACKAGE_NAME_GETTER)
     }
 
-    fun contains(str: String): ListFilter {
+    fun contains(str: String): Filter {
         return StringContainsFilter(str, PACKAGE_NAME_GETTER)
     }
 
-    fun startsWith(prefix: String): ListFilter {
+    fun startsWith(prefix: String): Filter {
         return StringStartsWithFilter(prefix, PACKAGE_NAME_GETTER)
     }
 
-    fun endsWith(suffix: String): ListFilter {
+    fun endsWith(suffix: String): Filter {
         return StringEndsWithFilter(suffix, PACKAGE_NAME_GETTER)
     }
 
-    fun matches(regex: String): ListFilter {
+    fun matches(regex: String): Filter {
         return StringMatchesFilter(regex, PACKAGE_NAME_GETTER)
     }
 }
