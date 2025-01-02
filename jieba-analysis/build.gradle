@@ -1,10 +1,10 @@
 plugins {
-    id 'com.android.library' // Android Library 插件
-    id 'kotlin-android' // Kotlin Android 插件
+    id 'com.android.library'
+    id 'kotlin-android'
 }
 
 android {
-    namespace = "com.huaban.jieba"
+    namespace = 'com.huaban.jieba'
     compileSdk = project.ext.compileSdk
 
     defaultConfig {
@@ -15,7 +15,7 @@ android {
         versionName = '1.0.3-SNAPSHOT (Optimized for AutoJs6)'
         description = '结巴分词工具(jieba for java)'
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     compileOptions {
