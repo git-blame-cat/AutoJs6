@@ -1,8 +1,10 @@
 *.apk
 *.zip
+!signing.properties.zip
 *.exe
 *.iml
 *.jks
+!autojs6-release.jks
 *.log
 *.ffs_db
 *.patch
