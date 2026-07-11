@@ -8,10 +8,16 @@ import org.autojs.autojs6.R
 object LeakCanarySetup {
 
     fun setup(application: Application) {
-        val isEnable = application.resources.getBoolean(R.bool.leak_canary_enabled)
-        LeakCanary.config = LeakCanary.config.copy(dumpHeap = isEnable)
-        LeakCanary.showLeakDisplayActivityLauncherIcon(isEnable)
-        Log.d(LeakCanarySetup::class.java.simpleName, "LeakCanary has been set up as ${if (isEnable) "enabled" else "disabled"}")
+        val isEnabled = application.resources.getBoolean(R.bool.leak_canary_enabled) &&
+            application.resources.getBoolean(R.bool.leak_canary_watcher_auto_install)
+        if (isEnabled) {
+            LeakCanary.config = LeakCanary.config.copy(dumpHeap = true)
+            LeakCanary.showLeakDisplayActivityLauncherIcon(true)
+        }
+        Log.d(
+            LeakCanarySetup::class.java.simpleName,
+            "LeakCanary has been set up as ${if (isEnabled) "enabled" else "disabled"}",
+        )
     }
 
 }

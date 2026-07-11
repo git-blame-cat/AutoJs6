@@ -1466,7 +1466,7 @@ open class ApkBuilder(apkInputStream: InputStream?, private val outApkFile: File
                 "libonnxruntime.so",
             ),
             assetDirsToInclude = listOf(
-                "assets/labels",
+                "assets/rapidocr-models",
             ),
         ),
 

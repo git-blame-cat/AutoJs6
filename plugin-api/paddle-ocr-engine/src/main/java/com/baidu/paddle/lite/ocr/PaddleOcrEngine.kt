@@ -2,7 +2,6 @@ package com.baidu.paddle.lite.ocr
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import org.autojs.plugin.paddle.ocr.api.OcrOptions
 import org.autojs.plugin.paddle.ocr.api.OcrResult
 import java.io.FileNotFoundException
@@ -18,43 +17,18 @@ class PaddleOcrEngine(
     private val appContext: Context,
     private val variant: VariantSpec,
     private val bridge: NativeBridge = PredictorNativeBridge(),
-) {
-
-    @Volatile
-    private var initialized: Boolean = false
+) : AutoCloseable {
 
     private val lock = Any()
+    private val profileState = EngineProfileState()
 
     /**
      * Initialize native libs and load models.
      * zh-CN: 初始化 native 库并加载模型.
      */
     fun ensureInitialized(options: OcrOptions) {
-        if (initialized) return
         synchronized(lock) {
-            if (initialized) return
-
-            // Resolve model profile by options + variant.
-            // zh-CN: 根据 options + variant 决定模型组合.
-            val profile = variant.resolveProfile(options)
-
-            // Ensure required assets exist.
-            // zh-CN: 确保所需 assets 存在.
-            variant.assertAssetsExist(appContext, profile)
-
-            // Prepare checking bitmap from drawable resource.
-            // zh-CN: 从 drawable 资源准备检查用 bitmap.
-            val checkingBitmap = decodeDrawable(appContext, variant.checkingDrawableRes)
-
-            // Delegate to bridge for real initialization.
-            // zh-CN: 委托给 bridge 执行真实初始化.
-            bridge.init(
-                context = appContext,
-                profile = profile,
-                checkingBitmap = checkingBitmap,
-            )
-
-            initialized = true
+            ensureInitializedLocked(options)
         }
     }
 
@@ -63,8 +37,10 @@ class PaddleOcrEngine(
      * zh-CN: 仅识别文本.
      */
     fun recognizeText(bitmap: Bitmap, options: OcrOptions): List<String> {
-        ensureInitialized(options)
-        return bridge.recognizeText(bitmap, options)
+        return synchronized(lock) {
+            ensureInitializedLocked(options)
+            bridge.recognizeText(bitmap, options)
+        }
     }
 
     /**
@@ -72,15 +48,58 @@ class PaddleOcrEngine(
      * zh-CN: 检测并返回文本框信息.
      */
     fun detect(bitmap: Bitmap, options: OcrOptions): List<OcrResult> {
-        ensureInitialized(options)
-        return bridge.detect(bitmap, options)
+        return synchronized(lock) {
+            ensureInitializedLocked(options)
+            bridge.detect(bitmap, options)
+        }
     }
 
-    private fun decodeDrawable(context: Context, resId: Int): Bitmap {
-        return BitmapFactory.decodeResource(context.resources, resId)
-            ?: throw IllegalStateException(
-                context.getString(R.string.error_failed_to_decode_checking_drawable_resource)
-            )
+    override fun close() {
+        synchronized(lock) {
+            bridge.release()
+            profileState.reset()
+        }
+    }
+
+    private fun ensureInitializedLocked(options: OcrOptions) {
+        // Resolve model profile by options + variant.
+        // zh-CN: 根据 options + variant 决定模型组合.
+        val profile = variant.resolveProfile(options)
+        if (!profileState.requiresInitialization(profile)) return
+
+        // Ensure required assets exist.
+        // zh-CN: 确保所需 assets 存在.
+        variant.assertAssetsExist(appContext, profile)
+
+        // Delegate to bridge for real initialization.
+        // zh-CN: 委托给 bridge 执行真实初始化.
+        profileState.markInitializationStarted()
+        bridge.init(
+            context = appContext,
+            profile = profile,
+        )
+
+        profileState.markInitialized(profile)
+    }
+
+}
+
+internal class EngineProfileState {
+
+    private var initializedProfile: ModelProfile? = null
+
+    fun requiresInitialization(profile: ModelProfile): Boolean = initializedProfile != profile
+
+    fun markInitialized(profile: ModelProfile) {
+        initializedProfile = profile
+    }
+
+    fun markInitializationStarted() {
+        initializedProfile = null
+    }
+
+    fun reset() {
+        initializedProfile = null
     }
 }
 
@@ -97,7 +116,6 @@ interface NativeBridge {
     fun init(
         context: Context,
         profile: ModelProfile,
-        checkingBitmap: Bitmap,
     )
 
     /**
@@ -111,6 +129,9 @@ interface NativeBridge {
      * zh-CN: 检测并返回带框结果.
      */
     fun detect(bitmap: Bitmap, options: OcrOptions): List<OcrResult>
+
+    /** Release predictor and native resources. [zh-CN: 释放 predictor 及原生资源]. */
+    fun release()
 }
 
 /**
@@ -154,8 +175,6 @@ data class VariantSpec(
     val detModelFile: String,
     val recModelFile: String,
     val clsModelFile: String,
-
-    val checkingDrawableRes: Int,
 ) {
 
     fun resolveProfile(options: OcrOptions): ModelProfile {
@@ -261,8 +280,6 @@ data class VariantSpec(
             detModelFile = "PP-OCRv5_mobile_det.nb",
             recModelFile = "PP-OCRv5_mobile_rec.nb",
             clsModelFile = "PP-LCNet_x1_0_textline_ori.nb",
-
-            checkingDrawableRes = R.drawable.paddle_ocr_test,
         )
 
         fun v3(): VariantSpec = VariantSpec(
@@ -279,8 +296,6 @@ data class VariantSpec(
             detModelFile = "det_opt.nb",
             recModelFile = "rec_opt.nb",
             clsModelFile = "cls_opt.nb",
-
-            checkingDrawableRes = R.drawable.paddle_ocr_test,
         )
     }
 }

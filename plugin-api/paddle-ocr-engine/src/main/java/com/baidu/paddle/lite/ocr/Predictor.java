@@ -336,6 +336,7 @@ public class Predictor {
         config.detModelFilename = realPath + File.separator + detModelFilename;
         config.recModelFilename = realPath + File.separator + recModelFilename;
         config.clsModelFilename = realPath + File.separator + clsModelFilename;
+        config.openCLCacheDir = appCtx.getCacheDir().getAbsolutePath();
         Log.i("Predictor", "model path" + config.detModelFilename + " ; " + config.recModelFilename + ";" + config.clsModelFilename);
         config.cpuPower = cpuPowerMode;
 

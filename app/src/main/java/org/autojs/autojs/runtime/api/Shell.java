@@ -58,6 +58,10 @@ public class Shell extends AbstractShell {
 
     private static final boolean DEBUG = true;
     private static final String TAG = "Shell";
+    private static final int MAX_COMMAND_OUTPUT_LINES = 4096;
+    private static final int MAX_COMMAND_OUTPUT_CHARACTERS = 1 << 20;
+    private static final int MAX_PENDING_LINE_CHARACTERS = 1 << 20;
+    private static final String COMMAND_OUTPUT_TRUNCATED = "[shell output truncated]";
 
     private volatile TermSession mTermSession;
     private final Object mInitLock = new Object();
@@ -67,6 +71,7 @@ public class Shell extends AbstractShell {
     private volatile boolean mInitialized = false;
     private volatile boolean mWaitingExit = false;
     private volatile String mCommandOutput = null;
+    private volatile boolean mWaitingCommandOutput = false;
     private Callback mCallback;
 
     public Shell(Context context, boolean root) {
@@ -105,12 +110,20 @@ public class Shell extends AbstractShell {
     }
 
     public String execAndWaitFor(String command) {
-        exec(command);
         synchronized (mCommandOutputLock) {
+            ensureInitialized();
+            mCommandOutput = null;
+            ((MyShellTermSession) mTermSession).resetCommandOutput();
+            mWaitingCommandOutput = true;
+            mTermSession.write(command + "\n");
             try {
-                mCommandOutputLock.wait();
+                while (mWaitingCommandOutput) {
+                    mCommandOutputLock.wait();
+                }
                 return mCommandOutput;
             } catch (InterruptedException e) {
+                mWaitingCommandOutput = false;
+                ((MyShellTermSession) mTermSession).resetCommandOutput();
                 throw new ScriptInterruptedException();
             }
         }
@@ -206,8 +219,11 @@ public class Shell extends AbstractShell {
 
     private class MyShellTermSession extends ShellTermSession {
 
-        private final StringBuilder mStringBuffer = new StringBuilder();
+        private final BoundedTextAccumulator mPendingLine =
+                new BoundedTextAccumulator(MAX_PENDING_LINE_CHARACTERS);
         private final ArrayList<String> mCommandOutputs = new ArrayList<>();
+        private int mCommandOutputCharacterCount;
+        private boolean mCommandOutputTruncated;
 
         public MyShellTermSession(TermSettings settings, String initialCommand) throws IOException {
             super(settings, initialCommand);
@@ -217,12 +233,8 @@ public class Shell extends AbstractShell {
             if (!line.isEmpty() && !line.contains("/dev/input/event")) {
                 logDebug("onNewLine: " + line);
             }
-            if (!mInitialized) {
-                if (!isExecWithRoot() && line.endsWith(" $ sh")) {
-                    notifyInitialized();
-                }
-            } else {
-                mCommandOutputs.add(line);
+            if (mInitialized) {
+                appendCommandOutput(line);
             }
             if (mCallback != null) {
                 mCallback.onNewLine(line);
@@ -232,17 +244,62 @@ public class Shell extends AbstractShell {
             }
         }
 
-        private void onCommandOutput(ArrayList<String> output) {
-            StringBuilder result = new StringBuilder();
-            for (int i = 1; i < output.size(); i++) {
-                result.append(output.get(i));
-                if (i < output.size() - 1) {
-                    result.append("\n");
-                }
-            }
-            logDebug("onCommandOutput: lines = " + output + ", output = " + result);
+        private void appendCommandOutput(String line) {
             synchronized (mCommandOutputLock) {
+                if (!mWaitingCommandOutput || mCommandOutputTruncated) {
+                    return;
+                }
+                if (mCommandOutputs.size() >= MAX_COMMAND_OUTPUT_LINES
+                        || mCommandOutputCharacterCount + line.length() > MAX_COMMAND_OUTPUT_CHARACTERS) {
+                    mCommandOutputs.add(COMMAND_OUTPUT_TRUNCATED);
+                    mCommandOutputTruncated = true;
+                    return;
+                }
+                mCommandOutputs.add(line);
+                mCommandOutputCharacterCount += line.length();
+            }
+        }
+
+        private void markCommandOutputTruncated() {
+            synchronized (mCommandOutputLock) {
+                if (!mWaitingCommandOutput || mCommandOutputTruncated) {
+                    return;
+                }
+                // onCommandOutput skips the first line because it is the echoed command.
+                if (mCommandOutputs.isEmpty()) {
+                    mCommandOutputs.add("");
+                }
+                mCommandOutputs.add(COMMAND_OUTPUT_TRUNCATED);
+                mCommandOutputTruncated = true;
+            }
+        }
+
+        private void resetCommandOutput() {
+            synchronized (mCommandOutputLock) {
+                mCommandOutputs.clear();
+                mCommandOutputCharacterCount = 0;
+                mCommandOutputTruncated = false;
+            }
+        }
+
+        private void onCommandOutput() {
+            synchronized (mCommandOutputLock) {
+                if (!mWaitingCommandOutput) {
+                    return;
+                }
+                StringBuilder result = new StringBuilder();
+                for (int i = 1; i < mCommandOutputs.size(); i++) {
+                    result.append(mCommandOutputs.get(i));
+                    if (i < mCommandOutputs.size() - 1) {
+                        result.append("\n");
+                    }
+                }
+                logDebug("onCommandOutput: lines=" + mCommandOutputs.size()
+                        + ", chars=" + result.length()
+                        + (mCommandOutputTruncated ? ", truncated" : ""));
                 mCommandOutput = result.toString();
+                mWaitingCommandOutput = false;
+                resetCommandOutput();
                 mCommandOutputLock.notifyAll();
             }
         }
@@ -251,41 +308,44 @@ public class Shell extends AbstractShell {
             if (!str.isEmpty() && !str.contains("/dev/input/event")) {
                 logDebug("onOutput: " + str);
             }
-            if (!mInitialized) {
-                if (isExecWithRoot() && str.endsWith(":/ # ")) {
-                    notifyInitialized();
-                }
-            }
             int start = 0;
-            int i;
-            while (true) {
-                i = str.indexOf("\n", start);
-                if (i > 0) {
-                    mStringBuffer.append(str.substring(start, i));
-                    onNewLine(mStringBuffer.toString().trim());
-                    mStringBuffer.setLength(0);
-                    // onNewLine((mStringBuffer + str.substring(0, i - 1)).trim());
-                    // mStringBuffer.delete(0, mStringBuffer.length());
-                } else {
-                    if (start <= str.length() - 1) {
-                        int len = mStringBuffer.length();
-                        if (len > 1 << 24) {
-                            Log.e(TAG, " String buffer was cleared as its huge length of " + len);
-
-                            mStringBuffer.setLength(0);
-                            // mStringBuffer.delete(0, len);
-                        } else if (len > 0) {
-                            logDebug("Length of string buffer: " + len);
-                        }
-                        mStringBuffer.append(str.substring(start));
-                    }
-                    break;
+            int i = str.indexOf("\n", start);
+            while (i >= 0) {
+                mPendingLine.append(str, start, i);
+                BoundedTextAccumulator.Snapshot line = mPendingLine.consume();
+                onNewLine(line.text.trim());
+                if (line.truncated) {
+                    markCommandOutputTruncated();
                 }
                 start = i + 1;
+                i = str.indexOf("\n", start);
             }
-            if (str.endsWith(" # ") || str.endsWith(" $ ")) {
-                onCommandOutput(mCommandOutputs);
-                mCommandOutputs.clear();
+            if (start < str.length()) {
+                mPendingLine.append(str, start, str.length());
+            }
+            String prompt = str.endsWith(" # ") || mPendingLine.endsWith(" # ") ? " # "
+                    : str.endsWith(" $ ") || mPendingLine.endsWith(" $ ") ? " $ " : null;
+            if (prompt != null) {
+                BoundedTextAccumulator.Snapshot tail = mPendingLine.consume();
+                if (!mInitialized) {
+                    boolean expectedPrompt = isExecWithRoot()
+                            ? " # ".equals(prompt)
+                            : " $ ".equals(prompt);
+                    if (expectedPrompt) {
+                        notifyInitialized();
+                    }
+                } else {
+                    String outputWithoutPrompt = tail.text.endsWith(prompt)
+                            ? tail.text.substring(0, tail.text.length() - prompt.length())
+                            : tail.text;
+                    if (mWaitingCommandOutput && !outputWithoutPrompt.isEmpty()) {
+                        onNewLine(outputWithoutPrompt.trim());
+                    }
+                    if (mWaitingCommandOutput && tail.truncated) {
+                        markCommandOutputTruncated();
+                    }
+                    onCommandOutput();
+                }
             }
             if (mCallback != null) {
                 mCallback.onOutput(str.replace("\r", ""));

@@ -14,6 +14,16 @@ object PluginTrustManager {
     )
 
     fun resolveTrustInfo(context: Context, packageName: String): TrustInfo {
+        if (packageName == context.packageName) {
+            return TrustInfo(
+                authorizedState = PluginAuthorizedState.USER_GRANTED,
+                isOfficial = false,
+                isTrusted = true,
+                developer = "AutoJs6",
+                primaryFingerprintSha256 = null,
+                fingerprintsSha256 = emptyList(),
+            )
+        }
         val fingerprints = PluginSignatureUtils.getSha256Fingerprints(context, packageName)
         val matchingPluginIdentifier = PLUGIN_IDENTIFIERS.firstOrNull { ids ->
             fingerprints.any { ids.fingerprintsSha256.contains(it) }

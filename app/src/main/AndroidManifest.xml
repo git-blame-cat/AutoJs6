@@ -691,6 +691,23 @@
             android:taskAffinity="org.autojs.autojs.core.permission.PermissionRequestActivity"
             android:theme="@style/ScriptTheme.Transparent" />
 
+        <meta-data
+            android:name="org.autojs.plugin.WAKE_ACTIVITY"
+            android:value="io.github.supermonster003.autojs6.plugin.paddleocr.v5.WakeActivity" />
+
+        <activity
+            android:name="io.github.supermonster003.autojs6.plugin.paddleocr.v5.WakeActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:finishOnTaskLaunch="true"
+            android:permission="org.autojs.permission.PLUGIN"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="org.autojs.plugin.action.WAKE" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="org.autojs.autojs.core.activity.StartForResultActivity"
             android:excludeFromRecents="true"
@@ -726,6 +743,16 @@
         </service>
 
         <service android:name="org.eclipse.paho.android.service.MqttService" />
+
+        <service
+            android:name="io.github.supermonster003.autojs6.plugin.paddleocr.v5.OcrService"
+            android:exported="true"
+            android:permission="org.autojs.permission.PLUGIN">
+            <intent-filter>
+                <action android:name="org.autojs.plugin.PADDLE_OCR" />
+                <category android:name="paddle-ocr" />
+            </intent-filter>
+        </service>
 
         <activity
             android:name="org.autojs.autojs.inrt.SplashActivity"

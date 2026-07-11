@@ -33,6 +33,7 @@ val flavorNameApp = "app"
 val flavorNameInrt = "inrt"
 val buildTypeDebug = "debug"
 val buildTypeRelease = "release"
+val isLeakCanaryAutoInstallEnabled = !providers.gradleProperty("disableLeakCanary").orNull.toBoolean()
 val buildActionAssemble = "assemble"
 
 val taskNames: List<String> = gradle.startParameter.taskNames
@@ -168,6 +169,9 @@ dependencies /* Unclassified */ {
 
     // OpenCV
     implementation(project(":libs:org-opencv-4_8_0"))
+
+    // PaddleOCR
+    implementation(project(":libs:paddleocr"))
 
     // RapidOCR
     implementation(project(":libs:rapidocr"))
@@ -678,6 +682,9 @@ android {
             isMinifyEnabled = getByName(buildTypeRelease).isMinifyEnabled
             proguardFiles(*proguardFiles)
             niceSigningConfig?.let { signingConfig = it }
+            // Use -PdisableLeakCanary=true only for local images where its startup provider is unstable.
+            resValue("bool", "leak_canary_watcher_auto_install", isLeakCanaryAutoInstallEnabled.toString())
+            resValue("bool", "leak_canary_add_launcher_icon", isLeakCanaryAutoInstallEnabled.toString())
         }
         release {
             isMinifyEnabled = false
@@ -689,6 +696,7 @@ android {
     buildFeatures {
         aidl = true
         viewBinding = true
+        resValues = true
 
         // @Hint by SuperMonster003 on Aug 14, 2023.
         //  ! Substitution of "android.defaults.buildfeatures.buildconfig=true"

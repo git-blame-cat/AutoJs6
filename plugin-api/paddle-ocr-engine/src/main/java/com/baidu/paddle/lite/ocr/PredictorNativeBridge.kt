@@ -25,7 +25,7 @@ class PredictorNativeBridge : NativeBridge {
     @Volatile
     private var lastProfileKey: String? = null
 
-    override fun init(context: Context, profile: ModelProfile, checkingBitmap: Bitmap) {
+    override fun init(context: Context, profile: ModelProfile) {
 
         val desiredThreadNum = profile.cpuThreadNum
         val desiredUseSlim = profile.useSlim
@@ -129,6 +129,11 @@ class PredictorNativeBridge : NativeBridge {
                 extras = Bundle()
             }
         }
+    }
+
+    override fun release() {
+        predictor.releaseModel()
+        lastProfileKey = null
     }
 
     private fun applyRuntimeOptions(options: OcrOptions) {

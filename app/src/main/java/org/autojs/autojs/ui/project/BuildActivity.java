@@ -88,6 +88,7 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -125,7 +126,14 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
     private static final int REQ_EXPORT_JSON = 44402;
     private static final int REQ_IMPORT_JSON = 44403;
     public static final String EXTRA_SOURCE = BuildActivity.class.getName() + ".extra_source_file";
+    public static final String EXTRA_AUTO_BUILD = BuildActivity.class.getName() + ".extra_auto_build";
+    public static final String EXTRA_AUTO_BUILD_FINISH = BuildActivity.class.getName() + ".extra_auto_build_finish";
+    public static final String EXTRA_AUTO_BUILD_STATUS_FILE = BuildActivity.class.getName() + ".extra_auto_build_status_file";
     private static final String LOG_TAG = "BuildActivity";
+    private static final String AUTO_BUILD_STATUS_RUNNING = "running";
+    private static final String AUTO_BUILD_STATUS_SUCCESS = "success";
+    private static final String AUTO_BUILD_STATUS_FAILED = "failed";
+    private static final String AUTO_BUILD_STATUS_CANCELLED = "cancelled";
     private static final int MAX_BUILD_UNDO_STACK = 120;
     private static final Pattern REGEX_PACKAGE_NAME = Pattern.compile("^([A-Za-z][A-Za-z\\d_]*\\.)+([A-Za-z][A-Za-z\\d_]*)$");
 
@@ -325,6 +333,7 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
 
     private boolean mBuildConfigSaveSticky = false;
     private boolean mBuildProfilesInitialized = false;
+    private boolean mAutoBuildStarted = false;
     private boolean mApplyingBuildUiState = false;
     private boolean mSuppressBuildProfileSpinnerCallback = false;
     private boolean mSuppressBuildStateTracking = false;
@@ -498,7 +507,13 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
             initBuildProfilesIfNeeded();
         }
 
-        showHintDialogIfNeeded();
+        if (isAutoBuildRequested()) {
+            if (mSource == null && !mDeferBuildProfilesInitUntilSourceResolved) {
+                mSourcePathView.post(this::startAutoBuildIfRequested);
+            }
+        } else {
+            showHintDialogIfNeeded();
+        }
     }
 
     @Override
@@ -548,6 +563,9 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
         }
         mDeferBuildProfilesInitUntilSourceResolved = false;
         initBuildProfilesIfNeeded();
+        if (isAutoBuildRequested()) {
+            mSourcePathView.post(this::startAutoBuildIfRequested);
+        }
     }
 
     private void initBuildProfilesIfNeeded() {
@@ -2166,15 +2184,72 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
 
     void buildApk() {
         if (!checkInputs()) {
-            ViewUtils.showToast(this, getString(R.string.error_input_fields_check_failed));
+            String message = getString(R.string.error_input_fields_check_failed);
+            ViewUtils.showToast(this, message);
+            completeAutoBuild(AUTO_BUILD_STATUS_FAILED, message);
             return;
         }
         if (!checkAbis()) {
-            ViewUtils.showToast(this, getString(R.string.error_at_least_one_abi_needs_to_be_selected));
+            String message = getString(R.string.error_at_least_one_abi_needs_to_be_selected);
+            ViewUtils.showToast(this, message);
+            completeAutoBuild(AUTO_BUILD_STATUS_FAILED, message);
             return;
         }
         saveCurrentBuildProfileSilently();
         doBuildingApk();
+    }
+
+    private boolean isAutoBuildRequested() {
+        return getIntent().getBooleanExtra(EXTRA_AUTO_BUILD, false);
+    }
+
+    private boolean shouldFinishAfterAutoBuild() {
+        return getIntent().getBooleanExtra(EXTRA_AUTO_BUILD_FINISH, false);
+    }
+
+    private void startAutoBuildIfRequested() {
+        if (!isAutoBuildRequested() || mAutoBuildStarted) {
+            return;
+        }
+        mAutoBuildStarted = true;
+        writeAutoBuildStatus(AUTO_BUILD_STATUS_RUNNING + "\n");
+        buildApk();
+    }
+
+    private void completeAutoBuild(@NonNull String status, @Nullable String detail) {
+        if (!isAutoBuildRequested()) {
+            return;
+        }
+        StringBuilder content = new StringBuilder(status).append('\n');
+        if (!TextUtils.isEmpty(detail)) {
+            content.append(detail).append('\n');
+        }
+        writeAutoBuildStatus(content.toString());
+        if (shouldFinishAfterAutoBuild()) {
+            dismissProgressDialog();
+            super.finish();
+        }
+    }
+
+    private void writeAutoBuildStatus(@NonNull String content) {
+        if (!isAutoBuildRequested()) {
+            return;
+        }
+        String statusPath = getIntent().getStringExtra(EXTRA_AUTO_BUILD_STATUS_FILE);
+        if (TextUtils.isEmpty(statusPath)) {
+            return;
+        }
+        File statusFile = new File(statusPath);
+        File parent = statusFile.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        try (FileOutputStream output = new FileOutputStream(statusFile, false)) {
+            output.write(content.getBytes(StandardCharsets.UTF_8));
+            output.flush();
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "Failed to write auto build status: " + statusPath, e);
+        }
     }
 
     private boolean checkInputs() {
@@ -2329,6 +2404,7 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
         } catch (IOException e) {
             Log.e(LOG_TAG, "Failed to backup existing output apk", e);
             ErrorDialogActivity.showErrorDialog(this, R.string.text_failed_to_build, e.getMessage());
+            completeAutoBuild(AUTO_BUILD_STATUS_FAILED, e.toString());
             return;
         }
         mBuildCancelled.set(false);
@@ -2741,8 +2817,10 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
     private void handleBuildAborted() {
         dismissProgressDialog();
         cleanupBuildArtifactsAsync(true);
-        ViewUtils.showToast(this, getString(R.string.text_operation_aborted));
+        String message = getString(R.string.text_operation_aborted);
+        ViewUtils.showToast(this, message);
         finishBuildState();
+        completeAutoBuild(AUTO_BUILD_STATUS_CANCELLED, message);
     }
 
     private void finishBuildState() {
@@ -2786,6 +2864,7 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
         ErrorDialogActivity.showErrorDialog(this, R.string.text_failed_to_build, error.getMessage());
         Log.e(LOG_TAG, "Failed to build", error);
         finishBuildState();
+        completeAutoBuild(AUTO_BUILD_STATUS_FAILED, error.toString());
     }
 
     private void onBuildSuccessful(File outApk) {
@@ -2829,6 +2908,7 @@ public class BuildActivity extends BaseActivity implements ApkBuilder.ProgressCa
             });
         }
         finishBuildState();
+        completeAutoBuild(AUTO_BUILD_STATUS_SUCCESS, outApk.getPath());
     }
 
     @Override

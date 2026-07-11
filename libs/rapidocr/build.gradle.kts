@@ -55,7 +55,7 @@ val libsToDeploy = listOf(
         "https://github.com/RapidAI/RapidOcrOnnx/releases/download/${versionMap["ONNX"]}/Project_RapidOcrOnnx-${versionMap["ONNX"]}.7z",
     ).apply {
         setSourceDir("/Project_RapidOcrOnnx-${versionMap["ONNX"]}/models/")
-        setDestDir("/src/main/assets/models/")
+        setDestDir("/src/main/assets/rapidocr-models/")
     },
     utils.newLibDeployer(
         project,

@@ -56,6 +56,8 @@ object PaddleOcrPluginHost {
     private const val EXTRA_RAW_HEIGHT = "rawHeight"
     private const val EXTRA_RAW_STRIDE = "rawStride"
     private const val EXTRA_RAW_CONFIG = "rawConfig"
+    private const val CAPABILITY_MAX_RAW_IMAGE_BYTES = "maxRawImageBytes"
+    private const val RAW_BYTES_PER_PIXEL = 4L
     private const val IDLE_UNBIND_MS = 30_000L
 
     private val externalServiceFlag = runCatching { ServiceInfo::class.java.getField("FLAG_EXTERNAL_SERVICE").getInt(null) }.getOrNull() ?: 0
@@ -106,7 +108,7 @@ object PaddleOcrPluginHost {
         }
         ensureRawSupport(target, options)
         val start = uptimeMillis()
-        return createTempPfd(bitmap, options).use { pfd ->
+        return createTempPfd(bitmap, options, target).use { pfd ->
             withService(context, target.serviceInfo, DEFAULT_BIND_TIMEOUT_MS) { proxy ->
                 val remain = callTimeoutMs - (uptimeMillis() - start)
                 if (remain <= 0) error("AIDL call timeout in ${callTimeoutMs / 1000} seconds")
@@ -129,7 +131,7 @@ object PaddleOcrPluginHost {
         }
         ensureRawSupport(target, options)
         val start = uptimeMillis()
-        return createTempPfd(bitmap, options).use { pfd ->
+        return createTempPfd(bitmap, options, target).use { pfd ->
             withService(context, target.serviceInfo, DEFAULT_BIND_TIMEOUT_MS) { proxy ->
                 val remain = callTimeoutMs - (uptimeMillis() - start)
                 if (remain <= 0) error("AIDL call timeout")
@@ -171,8 +173,25 @@ object PaddleOcrPluginHost {
 
     // Convert temporary file to read-only FD.
     // zh-CN: 临时文件转换为只读 FD.
-    private fun createTempPfd(bmp: Bitmap, options: OcrOptions): ParcelFileDescriptor {
+    private fun createTempPfd(
+        bmp: Bitmap,
+        options: OcrOptions,
+        target: Discovered,
+    ): ParcelFileDescriptor {
         val useRaw = options.extras?.getBoolean(EXTRA_RAW_IMAGE, false) == true
+        val maxRawImageBytes = target.pluginInfo?.capabilities
+            ?.takeIf { it.containsKey(CAPABILITY_MAX_RAW_IMAGE_BYTES) }
+            ?.getLong(CAPABILITY_MAX_RAW_IMAGE_BYTES)
+        val estimatedRowBytes = if (bmp.config == Bitmap.Config.ARGB_8888) {
+            bmp.rowBytes.toLong()
+        } else {
+            bmp.width.toLong() * RAW_BYTES_PER_PIXEL
+        }
+        if (useRaw && !RawImageTransferPolicy.canTransferRaw(estimatedRowBytes, bmp.height, maxRawImageBytes)) {
+            Log.i(TAG, "raw image exceeds plugin limit; falling back to encoded transfer")
+            disableRawExtras(options)
+            return createEncodedPfd(bmp, options)
+        }
         if (useRaw && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             return runCatching { createRawPfd(bmp, options) }
                 .getOrElse {
@@ -210,7 +229,10 @@ object PaddleOcrPluginHost {
         val src = if (bmp.config == Bitmap.Config.ARGB_8888) bmp else bmp.copy(Bitmap.Config.ARGB_8888, false)
         val shouldRecycle = src !== bmp
         val rowBytes = src.rowBytes
-        val size = rowBytes * src.height
+        val size = Math.multiplyExact(rowBytes.toLong(), src.height.toLong()).let {
+            require(it <= Int.MAX_VALUE) { "raw image is too large: $it" }
+            it.toInt()
+        }
 
         val extras = options.extras ?: Bundle().also { options.extras = it }
         extras.putBoolean(EXTRA_RAW_IMAGE, true)
@@ -619,4 +641,14 @@ object PaddleOcrPluginHost {
 
     private class TimeoutException(msg: String) : RuntimeException(msg)
 
+}
+
+internal object RawImageTransferPolicy {
+
+    fun canTransferRaw(rowBytes: Long, height: Int, maxBytes: Long?): Boolean {
+        if (maxBytes == null || maxBytes <= 0L) return true
+        if (rowBytes <= 0L || height <= 0) return false
+        val totalBytes = Math.multiplyExact(rowBytes, height.toLong())
+        return totalBytes <= maxBytes
+    }
 }

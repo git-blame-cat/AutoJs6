@@ -23,6 +23,7 @@ private val libs = listOf(
     "androidx-appcompat-1_0_2",
     "apk-parser-1_0_2",
     "org-opencv-4_8_0",
+    "paddleocr",
     "rapidocr",
     "imagequant",
 

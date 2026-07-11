@@ -36,4 +36,5 @@ dependencies {
 
     implementation(libs.core.ktx)
     implementation(libs.preference.ktx)
+    testImplementation(libs.junit)
 }

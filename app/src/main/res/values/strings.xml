@@ -476,6 +476,7 @@
     <string name="entry_root_mode_force_root">Force set root mode</string>
     <string name="entry_root_record_out_file_type_binary">Binary type (non-editable)</string>
     <string name="entry_root_record_out_file_type_js">JavaScript type (editable)</string>
+    <string name="plugin_description">Paddle OCR plugin for text recognition based on Baidu PaddlePaddle</string>
     <string name="entry_timed_task_backend_alarm" translatable="false">AlarmManager</string>
     <string name="entry_timed_task_backend_job" translatable="false">JobScheduler</string>
     <string name="entry_timed_task_backend_work" translatable="false">WorkManager</string>
@@ -593,6 +594,7 @@
     <string name="error_no_embedded_paddle_ocr_assets_found">No embedded Paddle OCR assets found. Please re-package with Paddle OCR enabled.</string>
     <string name="error_no_enabled_plugin_for_module_label">No enabled plugin for \"%1$s\". Please enable a plugin and try again.</string>
     <string name="error_no_paddle_ocr_plugins_available">No Paddle OCR plugins available</string>
+    <string name="error_paddle_ocr_native_runtime_unavailable_for_current_abi">Paddle OCR native runtime is unavailable for the current ABI (%1$s). Missing libraries: %2$s</string>
     <string name="error_no_permission_to_access_shizuku">No permission to access Shizuku</string>
     <string name="error_no_post_notifications_permission">No \"post notifications\" permission</string>
     <string name="error_no_read_phone_state_permission">No \"read phone state\" permission</string>

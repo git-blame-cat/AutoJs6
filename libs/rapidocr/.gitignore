@@ -5,6 +5,7 @@
 
 /src/main/sharedLibs/
 /src/main/assets/models/
+/src/main/assets/rapidocr-models/
 /src/sdk/native/
 /src/main/onnx/
 /src/main/onnxruntime-shared/

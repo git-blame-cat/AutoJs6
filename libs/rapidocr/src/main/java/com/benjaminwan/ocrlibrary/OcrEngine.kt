@@ -13,10 +13,10 @@ class OcrEngine(context: Context) {
         System.loadLibrary("RapidOcr")
         val ret = init(
             context.assets, numThread,
-            "models/ch_PP-OCRv3_det_infer.onnx",
-            "models/ch_ppocr_mobile_v2.0_cls_infer.onnx",
-            "models/ch_PP-OCRv3_rec_infer.onnx",
-            "models/ppocr_keys_v1.txt",
+            "rapidocr-models/ch_PP-OCRv3_det_infer.onnx",
+            "rapidocr-models/ch_ppocr_mobile_v2.0_cls_infer.onnx",
+            "rapidocr-models/ch_PP-OCRv3_rec_infer.onnx",
+            "rapidocr-models/ppocr_keys_v1.txt",
         )
         if (!ret) throw IllegalArgumentException()
     }
