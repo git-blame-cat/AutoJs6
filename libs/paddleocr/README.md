@@ -19,7 +19,10 @@ The script:
 2. reads the NDK and CMake versions from `version.properties`;
 3. applies the NDK 29, Clang 21, and Python 3.14 compatibility changes;
 4. builds CPU/OpenCL plus extra OCR operators for `arm64-v8a` and
-   `armeabi-v7a` with Android API 24 and `c++_shared`;
+   `armeabi-v7a` with Android API 24 and `c++_shared`. It disables both
+   OpenMP and Paddle Lite's internal thread pool so CPU inference also works
+   through ARM-to-x86 translation layers used by some Windows Android
+   emulators;
 5. replaces the checked-in Paddle Lite headers and shared libraries only after
    both ABI builds succeed.
 

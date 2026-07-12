@@ -90,6 +90,12 @@ fi
 git -C "$SOURCE_DIR" apply --check "$PATCH_FILE"
 git -C "$SOURCE_DIR" apply "$PATCH_FILE"
 
+# Both Paddle Lite OpenMP and its internal thread pool fail under MuMu's
+# ARM64-to-x86 Houdini translation layer. Keep CPU inference single-threaded
+# for compatibility; real ARM devices remain functional.
+perl -0pi -e 's/(set\(WITH_MKLML \$\{WITH_MKL\}\))/set(LITE_WITH_OPENMP OFF CACHE STRING "Disable OpenMP for AutoJs6 Android compatibility" FORCE)\n\n$1/' \
+    "$SOURCE_DIR/CMakeLists.txt"
+
 # Paddle Lite v2.14-rc has a helper named ast.py. On Python 3.14 it shadows the
 # standard-library ast module while importing logging. Rename the helper and
 # update its imports without changing its implementation.
