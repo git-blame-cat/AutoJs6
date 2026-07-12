@@ -1,0 +1,73 @@
+diff --git a/cmake/os/android.cmake b/cmake/os/android.cmake
+index 79fdbd8..b82a4d1 100644
+--- a/cmake/os/android.cmake
++++ b/cmake/os/android.cmake
+@@ -93,52 +93,9 @@ if(ARM_TARGET_LANG STREQUAL "clang")
+     set(ANDROID_STL ${ANDROID_STL_TYPE})
+     if(ARM_TARGET_ARCH_ABI STREQUAL "armv8")
+         set(triple aarch64-v8a-linux-android)
+-        if(ANDROID_STL_TYPE MATCHES "^c\\+\\+_")
+-            # Use CMAKE_CXX_STANDARD_LIBRARIES_INIT to ensure libunwind and libc++ is linked in the right order
+-            set(LIBUNWIND_PATH "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libunwind.a")
+-            if(EXISTS ${LIBUNWIND_PATH})
+-                message(STATUS "libunwind is in ${LIBUNWIND_PATH}")
+-            else()
+-                # happened when NDK >= 23
+-                file(GLOB_RECURSE WIND_PATH  "${CMAKE_ANDROID_NDK}/*/libunwind.a")
+-                foreach(loop_path ${WIND_PATH})
+-                    string(FIND ${loop_path} "aarch64" STR_END)
+-                    string(SUBSTRING ${loop_path} 0 ${STR_END} REAL_LIBUNWIND_PATH)
+-                    break()
+-                endforeach()
+-                set(LIBUNWIND_PATH "${REAL_LIBUNWIND_PATH}aarch64/libunwind.a")
+-            endif()
+-            set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${LIBUNWIND_PATH}")
+-            if (ANDROID_NATIVE_API_LEVEL LESS 21)
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libandroid_support.a")
+-            endif()
+-            if(ANDROID_STL_TYPE STREQUAL "c++_shared")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++_shared.so")
+-            elseif(ANDROID_STL_TYPE STREQUAL "c++_static")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++_static.a")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++abi.a")
+-            else()
+-                message(FATAL_ERROR "Invalid Android STL TYPE: ${ANDROID_STL_TYPE}.")
+-            endif()
+-        endif()
+     elseif(ARM_TARGET_ARCH_ABI STREQUAL "armv7")
+         set(triple arm-v7a-linux-android)
+         set(ANDROID_ARM_NEON TRUE)
+-        if(ANDROID_STL_TYPE MATCHES "^c\\+\\+_")
+-            # Use CMAKE_CXX_STANDARD_LIBRARIES_INIT to ensure libunwind and libc++ is linked in the right order
+-            set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libunwind.a")
+-            if (ANDROID_NATIVE_API_LEVEL LESS 21)
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libandroid_support.a")
+-            endif()
+-            if(ANDROID_STL_TYPE STREQUAL "c++_shared")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++_shared.so")
+-            elseif(ANDROID_STL_TYPE STREQUAL "c++_static")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++_static.a")
+-                set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "${CMAKE_CXX_STANDARD_LIBRARIES_INIT} ${ANDROID_NDK}/sources/cxx-stl/llvm-libc++/libs/${ANDROID_ARCH_ABI}/libc++abi.a")
+-            else()
+-                message(FATAL_ERROR "Invalid Android STL TYPE: ${ANDROID_STL_TYPE}.")
+-            endif()
+-        endif()
+     else()
+         message(FATAL_ERROR "Clang do not support this ${ARM_TARGET_ARCH_ABI}, use armv8 or armv7")
+     endif()
+diff --git a/third-party/flatbuffers/pre-build/flatbuffers/flatbuffers.h b/third-party/flatbuffers/pre-build/flatbuffers/flatbuffers.h
+index c4dc5bc..87dc04a 100644
+--- a/third-party/flatbuffers/pre-build/flatbuffers/flatbuffers.h
++++ b/third-party/flatbuffers/pre-build/flatbuffers/flatbuffers.h
+@@ -1871,10 +1871,7 @@ class FlatBufferBuilder {
+     vector_downward &buf_;
+ 
+    private:
+-    TableKeyComparator &operator=(const TableKeyComparator &other) {
+-      buf_ = other.buf_;
+-      return *this;
+-    }
++    TableKeyComparator &operator=(const TableKeyComparator &other) = delete;
+   };
+   /// @endcond
+ 
