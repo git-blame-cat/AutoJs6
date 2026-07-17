@@ -1,65 +1,115 @@
-name: Android CI
+name: Android Release
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-master
+  cancel-in-progress: false
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: gradle
+          persist-credentials: false
 
-      - name: Install CMake 3.10.2 manually
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
         run: |
-          wget https://cmake.org/files/v3.10/cmake-3.10.2-Linux-x86_64.sh
-          chmod +x cmake-3.10.2-Linux-x86_64.sh
-          sudo ./cmake-3.10.2-Linux-x86_64.sh --skip-license --prefix=/usr/local
-          
-      - name: Install Ninja
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platforms;android-36" \
+            "ndk;29.0.14206865" \
+            "cmake;3.22.1"
+
+      - name: Restore release signing
+        env:
+          SIGNING_ZIP_PASSWORD: ${{ secrets.AUTOJS6_SIGNING_ZIP_PASSWORD }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
+          if [ -z "$SIGNING_ZIP_PASSWORD" ]; then
+            echo "AUTOJS6_SIGNING_ZIP_PASSWORD is not configured." >&2
+            exit 1
+          fi
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+          unzip -P "$SIGNING_ZIP_PASSWORD" -o signing.properties.zip sign.properties
+          chmod 600 sign.properties
+          test -s sign.properties
+          test -s autojs6-release.jks
 
-      - name: Build with Gradle (assembleInrtRelease)
-        run: ./gradlew assembleInrtRelease
+      - name: Build universal release APK
+        run: bash scripts/build_autojs6_release.sh
 
-      - name: Build with Gradle (assembleAppRelease)
-        run: ./gradlew assembleAppRelease
+      - name: Verify release APK
+        id: release_apk
+        run: |
+          shopt -s nullglob
+          apk_files=(app/build/outputs/apk/app/release/autojs6-v*-universal.apk)
+          if [ "${#apk_files[@]}" -ne 1 ]; then
+            echo "Expected exactly one universal APK, found ${#apk_files[@]}." >&2
+            exit 1
+          fi
 
-      - name: Upload arm64 artifacts
-        id: upload-arm64-apk
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-arm64-apk
-          path: app/build/outputs/apk/app/release/*-arm64-v8a.apk
-        continue-on-error: true
+          apk_path="${apk_files[0]}"
+          aapt_path=$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)
+          apksigner_path=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)
+          test -x "$aapt_path"
+          test -x "$apksigner_path"
 
-      - name: Upload armv7 artifacts
-        id: upload-armv7-apk
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-armv7-apk
-          path: app/build/outputs/apk/app/release/*-v7a.apk
-        continue-on-error: true
+          package_line=$("$aapt_path" dump badging "$apk_path" | head -n 1)
+          case "$package_line" in
+            "package: name='org.autojs.autojs6'"*) ;;
+            *)
+              echo "Unexpected APK package: $package_line" >&2
+              exit 1
+              ;;
+          esac
 
-      - name: Upload universal artifacts
-        id: upload-universal-apk
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-universal-apk
-          path: app/build/outputs/apk/app/release/*-universal.apk
-        continue-on-error: true
+          "$apksigner_path" verify --verbose "$apk_path"
+
+          version_name=$(sed -n 's/^VERSION_NAME=//p' version.properties)
+          version_code=$(sed -n 's/^VERSION_BUILD=//p' version.properties)
+          version_slug=$(printf '%s' "$version_name" | sed 's/[^A-Za-z0-9._-]/-/g')
+          test -n "$version_name"
+          test -n "$version_code"
+          test -n "$version_slug"
+
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "version_slug=$version_slug" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_PATH: ${{ steps.release_apk.outputs.apk_path }}
+          VERSION_NAME: ${{ steps.release_apk.outputs.version_name }}
+          VERSION_CODE: ${{ steps.release_apk.outputs.version_code }}
+          VERSION_SLUG: ${{ steps.release_apk.outputs.version_slug }}
+        run: |
+          release_tag="v${VERSION_SLUG}-master-build-${GITHUB_RUN_NUMBER}"
+
+          gh release create "$release_tag" "$APK_PATH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "AutoJs6 v${VERSION_NAME} (${VERSION_CODE}) · master build #${GITHUB_RUN_NUMBER}" \
+            --notes "Automated master release for AutoJs6 ${VERSION_NAME} (versionCode ${VERSION_CODE}), commit ${GITHUB_SHA}." \
+            --generate-notes \
+            --latest
