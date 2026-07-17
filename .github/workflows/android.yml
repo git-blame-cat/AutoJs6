@@ -35,8 +35,20 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager \
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$android_sdk_root" ]; then
+            echo "Android SDK root is not configured." >&2
+            exit 1
+          fi
+
+          sdkmanager_path=$(find "$android_sdk_root/cmdline-tools" -type f -name sdkmanager -print | sort -V | tail -n 1)
+          if [ ! -x "$sdkmanager_path" ]; then
+            echo "sdkmanager was not found under $android_sdk_root/cmdline-tools." >&2
+            exit 1
+          fi
+
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" \
             "platforms;android-36" \
             "ndk;29.0.14206865" \
             "cmake;3.22.1"
