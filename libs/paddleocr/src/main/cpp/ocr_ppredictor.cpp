@@ -26,17 +26,26 @@ int OCR_PPredictor::init(const std::string &det_model_content,
   _det_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR,
                      _config.mode, _config.opencl_cache_dir});
-  _det_predictor->init_nb(det_model_content);
+  if (_det_predictor->init_nb(det_model_content) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize det predictor");
+    return RETURN_ERROR;
+  }
 
   _rec_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR_INTERNAL,
                      _config.mode, _config.opencl_cache_dir});
-  _rec_predictor->init_nb(rec_model_content);
+  if (_rec_predictor->init_nb(rec_model_content) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize rec predictor");
+    return RETURN_ERROR;
+  }
 
   _cls_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR_INTERNAL,
                      _config.mode, _config.opencl_cache_dir});
-  _cls_predictor->init_nb(cls_model_content);
+  if (_cls_predictor->init_nb(cls_model_content) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize cls predictor");
+    return RETURN_ERROR;
+  }
   return RETURN_OK;
 }
 
@@ -46,17 +55,26 @@ int OCR_PPredictor::init_from_file(const std::string &det_model_path,
   _det_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR,
                      _config.mode, _config.opencl_cache_dir});
-  _det_predictor->init_from_file(det_model_path);
+  if (_det_predictor->init_from_file(det_model_path) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize det predictor from file");
+    return RETURN_ERROR;
+  }
 
   _rec_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR_INTERNAL,
                      _config.mode, _config.opencl_cache_dir});
-  _rec_predictor->init_from_file(rec_model_path);
+  if (_rec_predictor->init_from_file(rec_model_path) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize rec predictor from file");
+    return RETURN_ERROR;
+  }
 
   _cls_predictor = std::unique_ptr<PPredictor>(
       new PPredictor{_config.use_opencl, _config.thread_num, NET_OCR_INTERNAL,
                      _config.mode, _config.opencl_cache_dir});
-  _cls_predictor->init_from_file(cls_model_path);
+  if (_cls_predictor->init_from_file(cls_model_path) != RETURN_OK) {
+    LOGE("ocr cpp failed to initialize cls predictor from file");
+    return RETURN_ERROR;
+  }
   return RETURN_OK;
 }
 /**

@@ -25,7 +25,7 @@
   fprintf(stderr, "[" LOG_TAG "]Error: " format "\n", ##__VA_ARGS__)
 #endif
 
-enum RETURN_CODE { RETURN_OK = 0 };
+enum RETURN_CODE { RETURN_OK = 0, RETURN_ERROR = -1 };
 
 enum NET_TYPE { NET_OCR = 900100, NET_OCR_INTERNAL = 991008 };
 

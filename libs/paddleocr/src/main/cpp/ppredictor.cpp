@@ -62,6 +62,10 @@ template <typename ConfigT> int PPredictor::_init(ConfigT &config) {
   config.set_threads(_thread_num);
   config.set_power_mode(_mode);
   _predictor = paddle::lite_api::CreatePaddlePredictor(config);
+  if (!_predictor) {
+    LOGE("ocr cpp failed to create paddle predictor");
+    return RETURN_ERROR;
+  }
   LOGI("ocr cpp paddle instance created");
   return RETURN_OK;
 }

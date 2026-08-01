@@ -157,7 +157,34 @@ build_abi() {
 build_abi armv8 arm64-v8a
 build_abi armv7 armeabi-v7a
 
-READ_ELF="$NDK_ROOT/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
+NDK_PREBUILT_ROOT="$NDK_ROOT/toolchains/llvm/prebuilt"
+case "$(uname -s)" in
+    Darwin)
+        host_candidates=(darwin-arm64 darwin-x86_64)
+        ;;
+    Linux)
+        host_candidates=(linux-x86_64)
+        ;;
+    *)
+        echo "Unsupported host OS for llvm-readelf: $(uname -s)" >&2
+        exit 1
+        ;;
+esac
+
+NDK_HOST_TAG=""
+for host_candidate in "${host_candidates[@]}"; do
+    if [[ -x "$NDK_PREBUILT_ROOT/$host_candidate/bin/llvm-readelf" ]]; then
+        NDK_HOST_TAG="$host_candidate"
+        break
+    fi
+done
+
+if [[ -z "$NDK_HOST_TAG" ]]; then
+    echo "Cannot find llvm-readelf under $NDK_PREBUILT_ROOT" >&2
+    exit 1
+fi
+
+READ_ELF="$NDK_PREBUILT_ROOT/$NDK_HOST_TAG/bin/llvm-readelf"
 "$READ_ELF" -h "$STAGE_DIR/libs/arm64-v8a/libpaddle_light_api_shared.so" | grep 'AArch64' >/dev/null
 "$READ_ELF" -h "$STAGE_DIR/libs/armeabi-v7a/libpaddle_light_api_shared.so" | grep 'ARM' >/dev/null
 

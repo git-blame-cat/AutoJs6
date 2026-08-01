@@ -26,6 +26,7 @@ public class OCRPredictorNative {
                 OpenCVLoader.initDebug();
                 System.loadLibrary("Native");
             } catch (Throwable e) {
+                isSOLoaded.set(false);
                 throw new RuntimeException(
                         "Load libNative.so failed, please check it exists in apk file.", e);
             }
@@ -40,6 +41,9 @@ public class OCRPredictorNative {
             loadLibrary();
             nativePointer = init(config.detModelFilename, config.recModelFilename, config.clsModelFilename, config.useOpenCL,
                     config.cpuThreadNum, config.cpuPower, config.openCLCacheDir);
+            if (nativePointer == 0) {
+                throw new IllegalStateException("Failed to initialize Paddle OCR native predictor.");
+            }
             Log.i("OCRPredictorNative", "load success " + nativePointer);
         } finally {
             lock.unlock();

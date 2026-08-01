@@ -6,6 +6,7 @@
 #include "ocr_ppredictor.h"
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <paddle_api.h>
 #include <string>
 
@@ -28,9 +29,23 @@ Java_com_baidu_paddle_lite_ocr_OCRPredictorNative_init(
   conf.thread_num = thread_num;
   conf.mode = str_to_cpu_mode(cpu_mode);
   conf.opencl_cache_dir = opencl_cache_dir;
-  ppredictor::OCR_PPredictor *orc_predictor =
-      new ppredictor::OCR_PPredictor{conf};
-  orc_predictor->init_from_file(det_model_path, rec_model_path, cls_model_path);
+  ppredictor::OCR_PPredictor *orc_predictor = nullptr;
+  try {
+    orc_predictor = new ppredictor::OCR_PPredictor{conf};
+    if (orc_predictor->init_from_file(det_model_path, rec_model_path, cls_model_path) != RETURN_OK) {
+      LOGE("ocr cpp failed to initialize predictor");
+      delete orc_predictor;
+      return 0;
+    }
+  } catch (const std::exception &e) {
+    LOGE("ocr cpp predictor initialization threw an exception: %s", e.what());
+    delete orc_predictor;
+    return 0;
+  } catch (...) {
+    LOGE("ocr cpp predictor initialization threw an unknown exception");
+    delete orc_predictor;
+    return 0;
+  }
   return reinterpret_cast<jlong>(orc_predictor);
 }
 
